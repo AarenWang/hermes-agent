@@ -96,7 +96,7 @@ function Invoke-WslScript {
     Write-Info $Description
     $tmpFile = New-TemporaryFile
     try {
-        Set-Content -LiteralPath $tmpFile.FullName -Value $ScriptText -Encoding utf8NoBOM
+        Set-Content -LiteralPath $tmpFile.FullName -Value $ScriptText -Encoding UTF8
         Get-Content -LiteralPath $tmpFile.FullName -Raw | & wsl.exe -d $WslDistro -- bash -s --
     } finally {
         Remove-Item -LiteralPath $tmpFile.FullName -Force -ErrorAction SilentlyContinue
