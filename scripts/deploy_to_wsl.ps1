@@ -148,9 +148,9 @@ switch ($Mode) {
     "Pull" {
         $pullScript = @'
 set -euo pipefail
-DST_RAW={0}
-REMOTE={1}
-BRANCH={2}
+DST_RAW=__TARGET_DIR__
+REMOTE=__REMOTE__
+BRANCH=__BRANCH__
 
 case "$DST_RAW" in
   "~")
@@ -180,7 +180,10 @@ else
 fi
 
 git pull --ff-only "$REMOTE" "$BRANCH"
-'@ -f (Quote-Bash $TargetDir), (Quote-Bash $Remote), (Quote-Bash $Branch)
+'@
+        $pullScript = $pullScript.Replace("__TARGET_DIR__", (Quote-Bash $TargetDir))
+        $pullScript = $pullScript.Replace("__REMOTE__", (Quote-Bash $Remote))
+        $pullScript = $pullScript.Replace("__BRANCH__", (Quote-Bash $Branch))
         Invoke-WslScript -Description "Pulling $Remote/$Branch inside WSL install" -ScriptText $pullScript
         Write-Success "WSL git pull completed"
     }
