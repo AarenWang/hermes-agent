@@ -96,7 +96,8 @@ function Invoke-WslScript {
     Write-Info $Description
     $tmpFile = New-TemporaryFile
     try {
-        Set-Content -LiteralPath $tmpFile.FullName -Value $ScriptText -Encoding UTF8
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tmpFile.FullName, $ScriptText, $utf8NoBom)
         Get-Content -LiteralPath $tmpFile.FullName -Raw | & wsl.exe -d $WslDistro -- bash -s --
     } finally {
         Remove-Item -LiteralPath $tmpFile.FullName -Force -ErrorAction SilentlyContinue
@@ -147,9 +148,21 @@ switch ($Mode) {
     "Pull" {
         $pullScript = @'
 set -euo pipefail
-DST={0}
+DST_RAW={0}
 REMOTE={1}
 BRANCH={2}
+
+case "$DST_RAW" in
+  "~")
+    DST="$HOME"
+    ;;
+  "~/"*)
+    DST="$HOME/${DST_RAW#~/}"
+    ;;
+  *)
+    DST="$DST_RAW"
+    ;;
+esac
 
 cd "$DST"
 
