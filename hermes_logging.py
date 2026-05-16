@@ -148,6 +148,9 @@ COMPONENT_PREFIXES = {
     "cron": ("cron",),
 }
 
+PROMPT_TRACE_LOGGER_NAME = "hermes.prompt_trace"
+RUN_AGENT_PRINT_LOGGER_NAME = "hermes.run_agent_prints"
+
 
 # ---------------------------------------------------------------------------
 # Main setup
@@ -243,6 +246,23 @@ def setup_logging(
             formatter=RedactingFormatter(_LOG_FORMAT),
             log_filter=_ComponentFilter(COMPONENT_PREFIXES["gateway"]),
         )
+
+    _configure_dedicated_logger(
+        PROMPT_TRACE_LOGGER_NAME,
+        log_dir / "prompt_trace.log",
+        level=logging.INFO,
+        max_bytes=20 * 1024 * 1024,
+        backup_count=5,
+        formatter=RedactingFormatter(_LOG_FORMAT),
+    )
+    _configure_dedicated_logger(
+        RUN_AGENT_PRINT_LOGGER_NAME,
+        log_dir / "run_agent_prints.log",
+        level=logging.INFO,
+        max_bytes=10 * 1024 * 1024,
+        backup_count=3,
+        formatter=RedactingFormatter(_LOG_FORMAT),
+    )
 
     if _logging_initialized and not force:
         return log_dir
@@ -364,6 +384,29 @@ def _add_rotating_handler(
     if log_filter is not None:
         handler.addFilter(log_filter)
     logger.addHandler(handler)
+
+
+def _configure_dedicated_logger(
+    logger_name: str,
+    path: Path,
+    *,
+    level: int,
+    max_bytes: int,
+    backup_count: int,
+    formatter: logging.Formatter,
+) -> None:
+    """Attach a dedicated non-propagating rotating handler to a named logger."""
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+    logger.propagate = False
+    _add_rotating_handler(
+        logger,
+        path,
+        level=level,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+        formatter=formatter,
+    )
 
 
 def _read_logging_config():

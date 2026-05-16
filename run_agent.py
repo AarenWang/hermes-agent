@@ -33,6 +33,7 @@ except ModuleNotFoundError:
 
 import asyncio
 import base64
+import builtins
 import concurrent.futures
 import contextvars
 import copy
@@ -116,6 +117,68 @@ if _loaded_env_paths:
         logger.info("Loaded environment variables from %s", _env_path)
 else:
     logger.info("No .env file found. Using system environment variables.")
+
+
+def _render_print_output(*args, **kwargs) -> str:
+    """Best-effort reconstruction of a print() call for debug logging."""
+    sep = kwargs.get("sep", " ")
+    end = kwargs.get("end", "\n")
+    try:
+        return sep.join(str(arg) for arg in args) + end
+    except Exception:
+        return ""
+
+
+def _log_run_agent_print(*args, **kwargs) -> None:
+    """Write run_agent.py print output to a dedicated debug log."""
+    rendered = _render_print_output(*args, **kwargs)
+    if not rendered:
+        return
+    try:
+        from hermes_logging import RUN_AGENT_PRINT_LOGGER_NAME, setup_logging
+
+        setup_logging(hermes_home=_hermes_home)
+        logging.getLogger(RUN_AGENT_PRINT_LOGGER_NAME).info(rendered.rstrip("\n"))
+    except Exception:
+        pass
+
+
+def _log_effective_system_prompt(
+    *,
+    session_id: Optional[str],
+    provider: Optional[str],
+    model: Optional[str],
+    api_call_count: int,
+    prompt_text: str,
+) -> None:
+    """Write the final executed system prompt to a dedicated debug log."""
+    if not prompt_text:
+        return
+    try:
+        from hermes_logging import PROMPT_TRACE_LOGGER_NAME, setup_logging
+
+        setup_logging(hermes_home=_hermes_home)
+        header = [
+            "===== EFFECTIVE SYSTEM PROMPT =====",
+            f"session_id={session_id or ''}",
+            f"provider={provider or ''}",
+            f"model={model or ''}",
+            f"api_call={api_call_count}",
+            "",
+        ]
+        payload = "\n".join(header) + prompt_text
+        logging.getLogger(PROMPT_TRACE_LOGGER_NAME).info(payload)
+    except Exception:
+        pass
+
+
+def _logged_print(*args, **kwargs):
+    """Module-local print wrapper that also mirrors output to a log file."""
+    _log_run_agent_print(*args, **kwargs)
+    return builtins.print(*args, **kwargs)
+
+
+print = _logged_print
 
 
 # Import our tool system
@@ -2846,6 +2909,8 @@ class AIAgent:
         ``print_formatted_text(ANSI(...))``) without touching this method.
         """
         try:
+            if self._print_fn is not None:
+                _log_run_agent_print(*args, **kwargs)
             fn = self._print_fn or print
             fn(*args, **kwargs)
         except (OSError, ValueError):
@@ -12746,6 +12811,13 @@ class AIAgent:
             if self.ephemeral_system_prompt:
                 effective_system = (effective_system + "\n\n" + self.ephemeral_system_prompt).strip()
             if effective_system:
+                _log_effective_system_prompt(
+                    session_id=self.session_id,
+                    provider=self.provider,
+                    model=self.model,
+                    api_call_count=api_call_count,
+                    prompt_text=effective_system,
+                )
                 api_messages = [{"role": "system", "content": effective_system}] + api_messages
 
             # Inject ephemeral prefill messages right after the system prompt
