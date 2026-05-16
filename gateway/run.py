@@ -15043,7 +15043,15 @@ class GatewayRunner:
             _status_thread_metadata = self._thread_metadata_for_source(source, event_message_id) if _progress_thread_id else None
 
         def _status_callback_sync(event_type: str, message: str) -> None:
-            if not _status_adapter or not _run_still_current():
+            if not _run_still_current():
+                return
+            try:
+                from hermes_logging import log_run_agent_output
+
+                log_run_agent_output(message, source=f"gateway_status:{event_type}")
+            except Exception:
+                pass
+            if not _status_adapter:
                 return
             _fut = safe_schedule_threadsafe(
                 _status_adapter.send(

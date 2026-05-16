@@ -1768,6 +1768,12 @@ def _cprint(text: str):
     the line above it, and redraws the prompt cleanly.
     """
     _record_output_history(text)
+    try:
+        from hermes_logging import log_run_agent_output
+
+        log_run_agent_output(text, source="cli_cprint")
+    except Exception:
+        pass
 
     try:
         from prompt_toolkit.application import get_app_or_none, run_in_terminal
@@ -1832,6 +1838,9 @@ def _cprint(text: str):
             _pt_print(_PT_ANSI(text))
         except Exception:
             pass
+
+
+_cprint._hermes_logs_output = True  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------

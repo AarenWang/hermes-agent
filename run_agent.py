@@ -135,10 +135,22 @@ def _log_run_agent_print(*args, **kwargs) -> None:
     if not rendered:
         return
     try:
-        from hermes_logging import RUN_AGENT_PRINT_LOGGER_NAME, setup_logging
+        from hermes_logging import log_run_agent_output
 
-        setup_logging(hermes_home=_hermes_home)
-        logging.getLogger(RUN_AGENT_PRINT_LOGGER_NAME).info(rendered.rstrip("\n"))
+        log_run_agent_output(rendered, source="print", hermes_home=_hermes_home)
+    except Exception:
+        pass
+
+
+def _log_status_output(*args, source: str = "status", **kwargs) -> None:
+    """Write status-style output to the dedicated runtime trace log."""
+    rendered = _render_print_output(*args, **kwargs)
+    if not rendered:
+        return
+    try:
+        from hermes_logging import log_run_agent_output
+
+        log_run_agent_output(rendered, source=source, hermes_home=_hermes_home)
     except Exception:
         pass
 
@@ -2909,9 +2921,13 @@ class AIAgent:
         ``print_formatted_text(ANSI(...))``) without touching this method.
         """
         try:
+            _already_logged = bool(kwargs.pop("_hermes_logged", False))
             if self._print_fn is not None:
-                _log_run_agent_print(*args, **kwargs)
-            fn = self._print_fn or print
+                fn = self._print_fn
+                if not _already_logged and not getattr(fn, "_hermes_logs_output", False):
+                    _log_status_output(*args, source="safe_print", **kwargs)
+            else:
+                fn = print
             fn(*args, **kwargs)
         except (OSError, ValueError):
             pass
@@ -2935,13 +2951,14 @@ class AIAgent:
         all status/diagnostic prints routed through ``_vprint`` are suppressed
         so stdout stays machine-readable.
         """
+        _log_status_output(*args, source="vprint", **kwargs)
         if getattr(self, "suppress_status_output", False):
             return
         if not force and getattr(self, "_mute_post_response", False):
             return
         if not force and self._has_stream_consumers() and not self._executing_tools:
             return
-        self._safe_print(*args, **kwargs)
+        self._safe_print(*args, _hermes_logged=True, **kwargs)
 
     def _should_start_quiet_spinner(self) -> bool:
         """Return True when quiet-mode spinner output has a safe sink.

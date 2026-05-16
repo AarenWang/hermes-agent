@@ -311,6 +311,25 @@ def setup_verbose_logging() -> None:
     logging.getLogger("rex-deploy").setLevel(logging.INFO)
 
 
+def log_run_agent_output(
+    text: str,
+    *,
+    source: Optional[str] = None,
+    hermes_home: Optional[Path] = None,
+) -> None:
+    """Write a single runtime/status line to the dedicated output trace log."""
+    if not text:
+        return
+    try:
+        setup_logging(hermes_home=hermes_home)
+        payload = text.rstrip("\n")
+        if source:
+            payload = f"[{source}] {payload}"
+        logging.getLogger(RUN_AGENT_PRINT_LOGGER_NAME).info(payload)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
