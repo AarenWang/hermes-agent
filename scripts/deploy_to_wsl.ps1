@@ -98,7 +98,8 @@ function Invoke-WslScript {
     try {
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($tmpFile.FullName, $ScriptText, $utf8NoBom)
-        Get-Content -LiteralPath $tmpFile.FullName -Raw | & wsl.exe -d $WslDistro -- bash -s --
+        $tmpFileWsl = Convert-WindowsPathToWslPath -Path $tmpFile.FullName
+        & wsl.exe -d $WslDistro -- bash $tmpFileWsl
     } finally {
         Remove-Item -LiteralPath $tmpFile.FullName -Force -ErrorAction SilentlyContinue
     }
@@ -138,6 +139,14 @@ Write-Info "WSL distro: $WslDistro"
 Write-Info "WSL target: $TargetDir"
 Write-Info "Branch: $Branch"
 
+$TargetDirForBash = if ($TargetDir -eq "~") {
+    '$HOME'
+} elseif ($TargetDir -like "~/*") {
+    '"$HOME/' + $TargetDir.Substring(2).Replace('\', '/') + '"'
+} else {
+    Quote-Bash $TargetDir
+}
+
 if ($Push) {
     Invoke-Checked -Description "Pushing current branch to $PushRemote/$Branch" -ScriptBlock {
         & git push $PushRemote $Branch
@@ -148,21 +157,9 @@ switch ($Mode) {
     "Pull" {
         $pullScript = @'
 set -euo pipefail
-DST_RAW=__TARGET_DIR__
+DST=__TARGET_DIR__
 REMOTE=__REMOTE__
 BRANCH=__BRANCH__
-
-case "$DST_RAW" in
-  "~")
-    DST="$HOME"
-    ;;
-  "~/"*)
-    DST="$HOME/${DST_RAW#~/}"
-    ;;
-  *)
-    DST="$DST_RAW"
-    ;;
-esac
 
 cd "$DST"
 
@@ -181,7 +178,7 @@ fi
 
 git pull --ff-only "$REMOTE" "$BRANCH"
 '@
-        $pullScript = $pullScript.Replace("__TARGET_DIR__", (Quote-Bash $TargetDir))
+        $pullScript = $pullScript.Replace("__TARGET_DIR__", $TargetDirForBash)
         $pullScript = $pullScript.Replace("__REMOTE__", (Quote-Bash $Remote))
         $pullScript = $pullScript.Replace("__BRANCH__", (Quote-Bash $Branch))
         Invoke-WslScript -Description "Pulling $Remote/$Branch inside WSL install" -ScriptText $pullScript
