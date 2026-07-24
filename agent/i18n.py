@@ -87,11 +87,31 @@ _catalog_lock = threading.Lock()
 def _locales_dir() -> Path:
     """Return the directory containing locale YAML files.
 
-    Lives next to the repo root so both the bundled install and editable
-    checkouts find it without PYTHONPATH gymnastics.
+    Resolution order, first existing wins:
+
+    1. ``HERMES_BUNDLED_LOCALES`` env var -- set by the Nix wrapper (or any
+       sealed-packaging system) to point at the installed catalog directory.
+    2. ``<repo-root>/locales`` -- source checkouts and editable installs,
+       where the working tree sits next to ``agent/``.
+
+    Falling through to the source-style path (even when missing) keeps
+    ``_load_catalog`` error messages informative -- it logs the path it
+    looked at -- rather than raising.
     """
-    # agent/i18n.py -> agent/ -> repo root
-    return Path(__file__).resolve().parent.parent / "locales"
+    override = os.getenv("HERMES_BUNDLED_LOCALES", "").strip()
+    if override:
+        candidate = Path(override)
+        if candidate.is_dir():
+            return candidate
+        logger.warning(
+            "HERMES_BUNDLED_LOCALES points to a non-directory path (%s); "
+            "falling back to bundled/source locale resolution",
+            override,
+        )
+
+    # agent/i18n.py -> agent/ -> repo root (source checkout, editable install)
+    source_dir = Path(__file__).resolve().parent.parent / "locales"
+    return source_dir
 
 
 def _normalize_lang(value: Any) -> str:
